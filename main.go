@@ -25,6 +25,11 @@ type Image struct {
 	Image string `json:"image"`
 }
 
+// Response struct contains URL to uplaoded bucket
+type Response struct {
+	URL string `json:"url"`
+}
+
 func main() {
 	r := chi.NewRouter()
 
@@ -62,10 +67,16 @@ func uploadAuthorAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 	u1 := uuid.Must(uuid.NewV4())
 	fileName := saveToFile(u1.String(), image.Image)
-	upload(client, fileName)
+	response := upload(client, fileName)
+
+	render.Render(w, r, &response)
 }
 
-func upload(client *storage.Client, filename string) error {
+func (rd *Response) Render(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+func upload(client *storage.Client, filename string) Response {
 	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
 	if projectID == "" {
 		fmt.Fprintf(os.Stderr, "GOOGLE_CLOUD_PROJECT environment variable must be set.\n")
@@ -82,21 +93,23 @@ func upload(client *storage.Client, filename string) error {
 
 	f, err := os.Open(filename)
 	if err != nil {
-		return err
+		log.Panic(err)
 	}
 
 	defer f.Close()
 
-	wc := client.Bucket(bucketName).Object(filename).NewWriter(ctx)
+	wc := client.Bucket(bucketName).Object(fmt.Sprintf("author/%s", filename)).NewWriter(ctx)
 	if _, err = io.Copy(wc, f); err != nil {
-		return err
+		log.Panic(err)
 	}
+
 	if err := wc.Close(); err != nil {
-		return err
+		log.Panic(err)
 	}
+	URL := fmt.Sprintf("https://storage.googleapis.com/images.bookmanager.pro/author/%s", filename)
+	response := Response{URL: URL}
 
-	return nil
-
+	return response
 }
 
 func saveToFile(name string, image string) string {
